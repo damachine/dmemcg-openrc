@@ -45,11 +45,11 @@ dmem-run blender
 For a running process, verify the assignment with:
 
 ```sh
-xargs -r ps -fp < /sys/fs/cgroup/openrc.dmem-games/cgroup.procs
+xargs -r ps -fp < /sys/fs/cgroup/openrc.dmem-run/cgroup.procs
 ```
 
 ```sh
-watch -n1 'cat /sys/fs/cgroup/openrc.dmem-games/dmem.{low,current,peak}'
+watch -n1 'cat /sys/fs/cgroup/openrc.dmem-run/dmem.{low,current,peak}'
 # dmem.peak requires Linux 7.3+
 ```
 

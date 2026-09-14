@@ -4,7 +4,7 @@
 
 description="VRAM protection broker for OpenRC using DMEM low"
 command="/usr/sbin/dmemcg-openrcd"
-command_args="--cgroup ${dmemcg_cgroup:-/sys/fs/cgroup/openrc.dmem-games} --socket ${dmemcg_socket:-/run/dmemcg-openrc/control.sock}"
+command_args="--cgroup ${dmemcg_cgroup:-/sys/fs/cgroup/openrc.dmem-run} --socket ${dmemcg_socket:-/run/dmemcg-openrc/control.sock}"
 supervisor="supervise-daemon"
 respawn_delay=2
 respawn_max=5
