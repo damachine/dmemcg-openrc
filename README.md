@@ -14,7 +14,6 @@ Tested with Linux 7.3-rc3 and NVIDIA 615.71.09.
 
 ```sh
 make
-make check
 sudo make install
 ```
 
