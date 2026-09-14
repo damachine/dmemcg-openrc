@@ -1,18 +1,16 @@
 # dmemcg-openrc
 
-`dmemcg-openrc` gives explicitly launched games DMEM cgroup protection on an
-OpenRC system. It does not depend on systemd and does not patch Plasma.
-
-The root daemon moves each `dmem-run` process into a shared game cgroup. The
-Unix socket uses Linux `SO_PEERCRED`, and each client can register only its own
-PID. The client is moved before it replaces itself with the game, so VRAM
-allocations are charged to the correct cgroup from program start.
+A tiny VRAM protection broker for OpenRC that uses cgroup v2.
+This helps prevent VRAM reclaim under memory pressure.
+Nothing else needs to run in the background: no focus agent, polling service, or desktop integration.
 
 ## Requirements
 
-- Unified cgroup v2 with the `dmem` controller enabled
-- A GPU region listed in `/sys/fs/cgroup/dmem.capacity`
+- Unified cgroup v2 with DMEM enabled (Linux 6.15+; 7.3+ recommended)
+- AMDGPU or NVIDIA 615 or newer
 - OpenRC's `cgroups` service
+
+Tested with Linux 7.3-rc3 and NVIDIA 615.71.09.
 
 ## Build and install
 
@@ -24,38 +22,38 @@ sudo make install
 
 The Gentoo ebuild in `packaging/gentoo` is intended for a local overlay.
 
-## Use
+## Usage
 
-Enable service:
+Enable and start the service:
 
 ```sh
 rc-update add dmemcg-openrc default
 rc-service dmemcg-openrc start
 ```
 
-Place `dmem-run` directly before `%command%` in a Steam game's launch options:
+Run any command through `dmem-run`. For example, place it directly before `%command%` in a Steam game's launch options:
 
 ```text
 gamemoderun dmem-run %command%
 ```
 
-Existing preparation and cleanup commands can remain around this expression.
-Successful operation produces no terminal output.
-
-For a running game, verify the assignment with:
+Or run a command directly:
 
 ```sh
-cat /proc/$(pgrep -n -f 'game executable')/cgroup
-cat /sys/fs/cgroup/openrc.dmem-games/dmem.low
+dmem-run blender
+```
+
+For a running process, verify the assignment with:
+
+```sh
+xargs -r ps -fp < /sys/fs/cgroup/openrc.dmem-games/cgroup.procs
 ```
 
 ```sh
 watch -n1 'cat /sys/fs/cgroup/openrc.dmem-games/dmem.{low,current,peak}'
+# dmem.peak requires Linux 7.3+
 ```
 
-## Related work
+## Inspiration
 
-This is an independent OpenRC implementation inspired by the
-[SteamOS dmemcg booster](https://gitlab.steamos.cloud/holo/dmemcg-booster) and
-the foreground-booster work in
-[Jovian's kcgroups fork](https://github.com/Jovian-Experiments/kcgroups).
+This is an independent OpenRC implementation inspired by the [SteamOS dmemcg booster](https://gitlab.steamos.cloud/holo/dmemcg-booster) and the foreground-booster work in [Jovian's kcgroups fork](https://github.com/Jovian-Experiments/kcgroups).

@@ -4,7 +4,7 @@ EGIT_REPO_URI="https://github.com/damachine/dmemcg-openrc.git"
 
 inherit git-r3 toolchain-funcs
 
-DESCRIPTION="DMEM cgroup broker for OpenRC"
+DESCRIPTION="VRAM protection broker for OpenRC using DMEM low"
 HOMEPAGE="https://github.com/damachine/dmemcg-openrc"
 
 LICENSE="MIT"
