@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE pkgmetadata SYSTEM "https://www.gentoo.org/dtd/metadata.dtd">
+<pkgmetadata>
+  <maintainer type="person">
+    <email>damachin3@proton.me</email>
+    <name>Christian Kühn</name>
+  </maintainer>
+  <upstream>
+    <remote-id type="github">damachine/dmemcg-openrc</remote-id>
+  </upstream>
+  <longdescription>
+    dmemcg-openrc moves explicitly launched games into a dedicated cgroup v2
+    group and applies DMEM low protection before the game allocates VRAM.
+  </longdescription>
+</pkgmetadata>
