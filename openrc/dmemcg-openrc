@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 # shellcheck disable=SC2034
 
-description="DMEM cgroup broker for OpenRC game processes"
+description="VRAM protection broker for OpenRC using DMEM low"
 command="/usr/sbin/dmemcg-openrcd"
 command_args="--cgroup ${dmemcg_cgroup:-/sys/fs/cgroup/openrc.dmem-games} --socket ${dmemcg_socket:-/run/dmemcg-openrc/control.sock}"
 supervisor="supervise-daemon"

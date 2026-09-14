@@ -9,7 +9,7 @@
     <remote-id type="github">damachine/dmemcg-openrc</remote-id>
   </upstream>
   <longdescription>
-    dmemcg-openrc moves explicitly launched games into a dedicated cgroup v2
-    group and applies DMEM low protection before the game allocates VRAM.
+    dmemcg-openrc moves explicitly launched processes into a dedicated cgroup
+    and applies DMEM low protection before they allocate VRAM.
   </longdescription>
 </pkgmetadata>
