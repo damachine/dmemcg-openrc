@@ -2,7 +2,7 @@
 #ifndef DMEMCG_OPENRC_COMMON_H
 #define DMEMCG_OPENRC_COMMON_H
 
-#define DMEMCG_DEFAULT_CGROUP "/sys/fs/cgroup/openrc.dmem-games"
+#define DMEMCG_DEFAULT_CGROUP "/sys/fs/cgroup/openrc.dmem-run"
 #define DMEMCG_DEFAULT_SOCKET "/run/dmemcg-openrc/control.sock"
 #define DMEMCG_MAX_LINE 4096
 #define DMEMCG_MAX_REGIONS 32
