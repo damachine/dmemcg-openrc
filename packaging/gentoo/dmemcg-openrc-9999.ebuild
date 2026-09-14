@@ -1,15 +1,15 @@
 EAPI=8
 
-inherit toolchain-funcs
+EGIT_REPO_URI="https://github.com/damachine/dmemcg-openrc.git"
 
-DESCRIPTION="DMEM cgroup broker for games on OpenRC"
+inherit git-r3 toolchain-funcs
+
+DESCRIPTION="DMEM cgroup broker for OpenRC"
 HOMEPAGE="https://github.com/damachine/dmemcg-openrc"
-SRC_URI="https://github.com/damachine/dmemcg-openrc/archive/refs/tags/v${PV}.tar.gz -> ${P}.tar.gz"
-S="${WORKDIR}/${P}"
 
 LICENSE="MIT"
 SLOT="0"
-KEYWORDS="amd64"
+KEYWORDS=""
 
 RDEPEND="sys-apps/openrc"
 
