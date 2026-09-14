@@ -17,10 +17,6 @@ src_compile() {
 	emake CC="$(tc-getCC)"
 }
 
-src_test() {
-	emake check
-}
-
 src_install() {
 	dosbin dmemcg-openrcd
 	dobin dmem-run
