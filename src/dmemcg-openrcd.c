@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/file.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -196,6 +197,22 @@ static void handle_client(int client, const char *base) {
   (void)write_all(client, "OK\n", 3);
 }
 
+static int acquire_instance_lock(void) {
+  int fd;
+  if (mkdir(DMEMCG_RUNTIME_DIR, 0755) < 0 && errno != EEXIST)
+    return -1;
+  fd = open(DMEMCG_LOCK, O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW, 0600);
+  if (fd < 0)
+    return -1;
+  if (flock(fd, LOCK_EX | LOCK_NB) < 0) {
+    int saved_errno = errno;
+    close(fd);
+    errno = saved_errno;
+    return -1;
+  }
+  return fd;
+}
+
 static int create_listener(gid_t socket_gid) {
   struct sockaddr_un address = {.sun_family = AF_UNIX};
   int listener;
@@ -203,8 +220,6 @@ static int create_listener(gid_t socket_gid) {
     errno = ENAMETOOLONG;
     return -1;
   }
-  if (mkdir(DMEMCG_RUNTIME_DIR, 0755) < 0 && errno != EEXIST)
-    return -1;
   listener = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
   if (listener < 0)
     return -1;
@@ -235,6 +250,7 @@ int main(int argc, char **argv) {
   bool socket_touched = false;
   int exit_status = EXIT_FAILURE;
   int listener = -1;
+  int lock_fd = -1;
   gid_t socket_gid = 0;
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--cgroup") == 0 && i + 1 < argc)
@@ -257,6 +273,11 @@ int main(int argc, char **argv) {
       goto cleanup;
     }
     socket_gid = group->gr_gid;
+  }
+  lock_fd = acquire_instance_lock();
+  if (lock_fd < 0) {
+    syslog(LOG_ERR, "cannot acquire instance lock: %s", strerror(errno));
+    goto cleanup;
   }
   if (load_regions(&regions) < 0) {
     syslog(LOG_ERR, "cannot prepare dmem cgroups: %s", strerror(errno));
@@ -306,16 +327,16 @@ int main(int argc, char **argv) {
 cleanup:
   if (listener >= 0)
     close(listener);
-  if (socket_touched) {
+  if (socket_touched)
     (void)unlink(DMEMCG_SOCKET);
-    (void)rmdir(DMEMCG_RUNTIME_DIR);
-  }
   if (base_touched) {
     char low[PATH_MAX];
     if (join_path(low, sizeof(low), base, "dmem.low") == 0)
       (void)write_regions(low, &regions, false);
     (void)rmdir(base);
   }
+  if (lock_fd >= 0)
+    close(lock_fd);
   closelog();
   return exit_status;
 }
