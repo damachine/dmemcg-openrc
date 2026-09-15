@@ -196,65 +196,39 @@ static void handle_client(int client, const char *base) {
   (void)write_all(client, "OK\n", 3);
 }
 
-static int create_listener(const char *socket_path, gid_t socket_gid) {
+static int create_listener(gid_t socket_gid) {
   struct sockaddr_un address = {.sun_family = AF_UNIX};
-  char directory[PATH_MAX];
-  char *slash;
   int listener;
-  if (strlen(socket_path) >= sizeof(address.sun_path)) {
+  if (sizeof(DMEMCG_SOCKET) > sizeof(address.sun_path)) {
     errno = ENAMETOOLONG;
     return -1;
   }
-  if (snprintf(directory, sizeof(directory), "%s", socket_path) >=
-      (int)sizeof(directory)) {
-    errno = ENAMETOOLONG;
-    return -1;
-  }
-  slash = strrchr(directory, '/');
-  if (slash == NULL || slash == directory) {
-    errno = EINVAL;
-    return -1;
-  }
-  *slash = '\0';
-  if (mkdir(directory, 0755) < 0 && errno != EEXIST)
+  if (mkdir(DMEMCG_RUNTIME_DIR, 0755) < 0 && errno != EEXIST)
     return -1;
   listener = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
   if (listener < 0)
     return -1;
-  memcpy(address.sun_path, socket_path, strlen(socket_path) + 1);
-  (void)unlink(socket_path);
+  memcpy(address.sun_path, DMEMCG_SOCKET, sizeof(DMEMCG_SOCKET));
+  (void)unlink(DMEMCG_SOCKET);
   if (bind(listener, (const struct sockaddr *)&address, sizeof(address)) < 0 ||
-      chown(socket_path, 0, socket_gid) < 0 || chmod(socket_path, 0660) < 0 ||
+      chown(DMEMCG_SOCKET, 0, socket_gid) < 0 ||
+      chmod(DMEMCG_SOCKET, 0660) < 0 ||
       listen(listener, 16) < 0) {
     int saved_errno = errno;
     close(listener);
-    (void)unlink(socket_path);
+    (void)unlink(DMEMCG_SOCKET);
     errno = saved_errno;
     return -1;
   }
   return listener;
 }
 
-static void remove_socket_directory(const char *socket_path) {
-  char directory[PATH_MAX];
-  char *slash;
-  int length = snprintf(directory, sizeof(directory), "%s", socket_path);
-  if (length < 0 || (size_t)length >= sizeof(directory))
-    return;
-  slash = strrchr(directory, '/');
-  if (slash == NULL || slash == directory)
-    return;
-  *slash = '\0';
-  (void)rmdir(directory);
-}
-
 static void usage(FILE *stream) {
-  fprintf(stream, "Usage: dmemcg-openrcd [--cgroup PATH] [--socket PATH]\n");
+  fprintf(stream, "Usage: dmemcg-openrcd [--cgroup PATH]\n");
 }
 
 int main(int argc, char **argv) {
   const char *base = DMEMCG_DEFAULT_CGROUP;
-  const char *socket_path = DMEMCG_DEFAULT_SOCKET;
   struct region_list regions = {0};
   struct sigaction action = {.sa_handler = stop_running};
   bool base_touched = false;
@@ -265,8 +239,6 @@ int main(int argc, char **argv) {
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--cgroup") == 0 && i + 1 < argc)
       base = argv[++i];
-    else if (strcmp(argv[i], "--socket") == 0 && i + 1 < argc)
-      socket_path = argv[++i];
     else {
       usage(stderr);
       return EXIT_FAILURE;
@@ -296,7 +268,7 @@ int main(int argc, char **argv) {
     goto cleanup;
   }
   socket_touched = true;
-  listener = create_listener(socket_path, socket_gid);
+  listener = create_listener(socket_gid);
   if (listener < 0) {
     syslog(LOG_ERR, "cannot create control socket: %s", strerror(errno));
     goto cleanup;
@@ -335,8 +307,8 @@ cleanup:
   if (listener >= 0)
     close(listener);
   if (socket_touched) {
-    (void)unlink(socket_path);
-    remove_socket_directory(socket_path);
+    (void)unlink(DMEMCG_SOCKET);
+    (void)rmdir(DMEMCG_RUNTIME_DIR);
   }
   if (base_touched) {
     char low[PATH_MAX];
