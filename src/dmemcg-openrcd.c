@@ -91,8 +91,12 @@ static int load_regions(struct region_list *regions) {
     }
     regions->count++;
   }
-  if (ferror(stream) != 0 || fclose(stream) != 0)
-    return -1;
+  {
+    int read_error = ferror(stream);
+    int close_error = fclose(stream);
+    if (read_error != 0 || close_error != 0)
+      return -1;
+  }
   if (regions->count == 0) {
     errno = ENODEV;
     return -1;
@@ -166,14 +170,14 @@ static int register_peer(const char *base, const struct ucred *credentials) {
 static void handle_client(int client, const char *base) {
   static const char expected[] = "REGISTER\n";
   struct ucred credentials;
-  struct timeval timeout = {.tv_sec = 5};
+  struct timeval timeout = {.tv_usec = 100000};
   socklen_t length = sizeof(credentials);
   char request[sizeof(expected) - 1];
   ssize_t received;
   if (getsockopt(client, SOL_SOCKET, SO_PEERCRED, &credentials, &length) < 0)
     return;
-  if (setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout,
-                 sizeof(timeout)) < 0)
+  if (setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) <
+      0)
     return;
   received = recv(client, request, sizeof(request), MSG_WAITALL);
   if (received != (ssize_t)sizeof(request) ||
