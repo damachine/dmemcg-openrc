@@ -78,7 +78,7 @@ int main(int argc, char **argv) {
     usage(stderr);
     return EXIT_FAILURE;
   }
-  fd = connect_control(DMEMCG_DEFAULT_SOCKET);
+  fd = connect_control(DMEMCG_SOCKET);
   if (fd < 0) {
     fprintf(stderr, "dmem-run: cannot contact dmemcg-openrcd: %s\n",
             strerror(errno));
