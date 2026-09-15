@@ -255,7 +255,10 @@ int main(int argc, char **argv) {
   const char *socket_path = DMEMCG_DEFAULT_SOCKET;
   struct region_list regions = {0};
   struct sigaction action = {.sa_handler = stop_running};
-  int listener;
+  bool base_touched = false;
+  bool socket_touched = false;
+  int exit_status = EXIT_FAILURE;
+  int listener = -1;
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--cgroup") == 0 && i + 1 < argc)
       base = argv[++i];
@@ -271,19 +274,26 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
   }
   openlog("dmemcg-openrcd", LOG_PID, LOG_DAEMON);
-  if (load_regions(&regions) < 0 || prepare_base(base, &regions) < 0) {
+  if (load_regions(&regions) < 0) {
     syslog(LOG_ERR, "cannot prepare dmem cgroups: %s", strerror(errno));
-    return EXIT_FAILURE;
+    goto cleanup;
   }
+  base_touched = true;
+  if (prepare_base(base, &regions) < 0) {
+    syslog(LOG_ERR, "cannot prepare dmem cgroups: %s", strerror(errno));
+    goto cleanup;
+  }
+  socket_touched = true;
   listener = create_listener(socket_path);
   if (listener < 0) {
     syslog(LOG_ERR, "cannot create control socket: %s", strerror(errno));
-    return EXIT_FAILURE;
+    goto cleanup;
   }
   sigemptyset(&action.sa_mask);
   (void)sigaction(SIGINT, &action, NULL);
   (void)sigaction(SIGTERM, &action, NULL);
   (void)signal(SIGPIPE, SIG_IGN);
+  exit_status = EXIT_SUCCESS;
   while (running != 0) {
     struct pollfd descriptor = {.fd = listener, .events = POLLIN};
     int result = poll(&descriptor, 1, 1000);
@@ -291,6 +301,14 @@ int main(int argc, char **argv) {
       if (errno == EINTR)
         continue;
       syslog(LOG_ERR, "poll failed: %s", strerror(errno));
+      exit_status = EXIT_FAILURE;
+      break;
+    }
+    if (result > 0 &&
+        (descriptor.revents & (POLLERR | POLLHUP | POLLNVAL)) != 0) {
+      syslog(LOG_ERR, "control socket poll failed: events %#x",
+             (unsigned int)descriptor.revents);
+      exit_status = EXIT_FAILURE;
       break;
     }
     if (result > 0 && (descriptor.revents & POLLIN) != 0) {
@@ -301,15 +319,19 @@ int main(int argc, char **argv) {
       }
     }
   }
-  close(listener);
-  (void)unlink(socket_path);
-  {
+cleanup:
+  if (listener >= 0)
+    close(listener);
+  if (socket_touched) {
+    (void)unlink(socket_path);
+    remove_socket_directory(socket_path);
+  }
+  if (base_touched) {
     char low[PATH_MAX];
     if (join_path(low, sizeof(low), base, "dmem.low") == 0)
       (void)write_regions(low, &regions, false);
+    (void)rmdir(base);
   }
-  (void)rmdir(base);
-  remove_socket_directory(socket_path);
   closelog();
-  return EXIT_SUCCESS;
+  return exit_status;
 }
