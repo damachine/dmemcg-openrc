@@ -11,7 +11,10 @@ LICENSE="MIT"
 SLOT="0"
 KEYWORDS=""
 
-RDEPEND="sys-apps/openrc"
+RDEPEND="
+	acct-group/video
+	sys-apps/openrc
+"
 
 src_compile() {
 	emake CC="$(tc-getCC)"

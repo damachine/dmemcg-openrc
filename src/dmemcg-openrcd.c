@@ -3,6 +3,7 @@
 #include "common.h"
 #include <errno.h>
 #include <fcntl.h>
+#include <grp.h>
 #include <limits.h>
 #include <poll.h>
 #include <signal.h>
@@ -195,7 +196,7 @@ static void handle_client(int client, const char *base) {
   (void)write_all(client, "OK\n", 3);
 }
 
-static int create_listener(const char *socket_path) {
+static int create_listener(const char *socket_path, gid_t socket_gid) {
   struct sockaddr_un address = {.sun_family = AF_UNIX};
   char directory[PATH_MAX];
   char *slash;
@@ -223,7 +224,8 @@ static int create_listener(const char *socket_path) {
   memcpy(address.sun_path, socket_path, strlen(socket_path) + 1);
   (void)unlink(socket_path);
   if (bind(listener, (const struct sockaddr *)&address, sizeof(address)) < 0 ||
-      chmod(socket_path, 0666) < 0 || listen(listener, 16) < 0) {
+      chown(socket_path, 0, socket_gid) < 0 || chmod(socket_path, 0660) < 0 ||
+      listen(listener, 16) < 0) {
     int saved_errno = errno;
     close(listener);
     (void)unlink(socket_path);
@@ -259,6 +261,7 @@ int main(int argc, char **argv) {
   bool socket_touched = false;
   int exit_status = EXIT_FAILURE;
   int listener = -1;
+  gid_t socket_gid = 0;
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--cgroup") == 0 && i + 1 < argc)
       base = argv[++i];
@@ -274,6 +277,15 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
   }
   openlog("dmemcg-openrcd", LOG_PID, LOG_DAEMON);
+  {
+    const struct group *group = getgrnam(DMEMCG_SOCKET_GROUP);
+    if (group == NULL) {
+      syslog(LOG_ERR, "required group %s does not exist",
+             DMEMCG_SOCKET_GROUP);
+      goto cleanup;
+    }
+    socket_gid = group->gr_gid;
+  }
   if (load_regions(&regions) < 0) {
     syslog(LOG_ERR, "cannot prepare dmem cgroups: %s", strerror(errno));
     goto cleanup;
@@ -284,7 +296,7 @@ int main(int argc, char **argv) {
     goto cleanup;
   }
   socket_touched = true;
-  listener = create_listener(socket_path);
+  listener = create_listener(socket_path, socket_gid);
   if (listener < 0) {
     syslog(LOG_ERR, "cannot create control socket: %s", strerror(errno));
     goto cleanup;
