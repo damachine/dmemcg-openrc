@@ -70,7 +70,6 @@ static ssize_t read_reply(int fd, char *reply, size_t size) {
 }
 
 int main(int argc, char **argv) {
-  const char *socket_path;
   char reply[16] = {0};
   ssize_t length;
   int fd;
@@ -79,10 +78,7 @@ int main(int argc, char **argv) {
     usage(stderr);
     return EXIT_FAILURE;
   }
-  socket_path = getenv("DMEMCG_OPENRC_SOCKET");
-  if (socket_path == NULL || socket_path[0] == '\0')
-    socket_path = DMEMCG_DEFAULT_SOCKET;
-  fd = connect_control(socket_path);
+  fd = connect_control(DMEMCG_DEFAULT_SOCKET);
   if (fd < 0) {
     fprintf(stderr, "dmem-run: cannot contact dmemcg-openrcd: %s\n",
             strerror(errno));

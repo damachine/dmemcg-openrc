@@ -6,8 +6,8 @@ Nothing else needs to run in the background: no focus agent, polling service, or
 
 ## Requirements
 
-- Unified cgroup v2 with DMEM enabled (Linux 6.15+; 7.3+ recommended)
-- AMDGPU or NVIDIA 615 or newer
+- Unified cgroup v2 with DMEM enabled (Linux 6.15+; `dmem.peak` requires 7.3+)
+- A GPU driver that registers at least one region in `/sys/fs/cgroup/dmem.capacity`
 - OpenRC's `cgroups` service
 
 Tested with Linux 7.3-rc3 and NVIDIA 615.71.09.
