@@ -41,8 +41,8 @@ sudo make uninstall
 Enable and start the service:
 
 ```sh
-rc-update add dmemcg-openrc default
-rc-service dmemcg-openrc start
+sudo rc-update add dmemcg-openrc default
+sudo rc-service dmemcg-openrc start
 ```
 
 Run any command through `dmem-run`. For example, place it directly before `%command%` in a Steam game's launch options:
