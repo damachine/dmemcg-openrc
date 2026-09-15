@@ -7,6 +7,7 @@ An OpenRC service and `dmem-run` launcher that place selected programs in a DMEM
 - Unified cgroup v2 with DMEM enabled (Linux 6.15+; `dmem.peak` requires 7.3+)
 - A GPU driver that registers at least one DMEM region (NVIDIA 615.71.09+ or AMDGPU; Linux 7.3+ recommended for AMDGPU)
 - OpenRC's `cgroups` service
+- The user that runs `dmem-run` must be in the `video` group
 
 Tested with Linux 7.3-rc3 and NVIDIA 615.71.09.
 
@@ -15,6 +16,12 @@ Tested with Linux 7.3-rc3 and NVIDIA 615.71.09.
 ```sh
 make
 sudo make install
+```
+
+If needed, add your user to `video`, then log in again:
+
+```sh
+sudo usermod -aG video "$USER"
 ```
 
 The Gentoo ebuild in `packaging/gentoo` is intended for a local overlay.
