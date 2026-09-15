@@ -5,7 +5,7 @@ LDFLAGS ?=
 WARNINGS = -Wall -Wextra -Werror -Wformat=2 -Wshadow -Wconversion \
 	-Wstrict-prototypes -Wmissing-prototypes
 
-.PHONY: all clean install
+.PHONY: all clean install uninstall
 all: dmemcg-openrcd dmem-run
 dmemcg-openrcd: src/dmemcg-openrcd.c src/common.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARNINGS) -std=c17 -o $@ src/dmemcg-openrcd.c $(LDFLAGS)
@@ -17,5 +17,12 @@ install: all
 	install -Dm0755 openrc/dmemcg-openrc "$(DESTDIR)/etc/init.d/dmemcg-openrc"
 	install -Dm0644 openrc/dmemcg-openrc.conf "$(DESTDIR)/etc/conf.d/dmemcg-openrc"
 	install -Dm0644 LICENSE "$(DESTDIR)/usr/share/licenses/dmemcg-openrc/LICENSE"
+uninstall:
+	rm -f "$(DESTDIR)/usr/sbin/dmemcg-openrcd" \
+		"$(DESTDIR)/usr/bin/dmem-run" \
+		"$(DESTDIR)/etc/init.d/dmemcg-openrc" \
+		"$(DESTDIR)/etc/conf.d/dmemcg-openrc" \
+		"$(DESTDIR)/usr/share/licenses/dmemcg-openrc/LICENSE"
+	rmdir "$(DESTDIR)/usr/share/licenses/dmemcg-openrc" 2>/dev/null || :
 clean:
 	rm -f dmemcg-openrcd dmem-run

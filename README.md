@@ -21,6 +21,14 @@ sudo make install
 
 The Gentoo ebuild in `packaging/gentoo` is intended for a local overlay.
 
+To remove a manual installation:
+
+```sh
+sudo rc-service dmemcg-openrc stop
+sudo rc-update del dmemcg-openrc default
+sudo make uninstall
+```
+
 ## Usage
 
 Enable and start the service:
