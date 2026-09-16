@@ -333,7 +333,14 @@ cleanup:
     char low[PATH_MAX];
     if (join_path(low, sizeof(low), base, "dmem.low") == 0)
       (void)write_regions(low, &regions, false);
-    (void)rmdir(base);
+    if (rmdir(base) < 0) {
+      int error = errno;
+      if (error == EBUSY || error == ENOTEMPTY)
+        syslog(LOG_NOTICE, "cgroup %s remains because it is not empty", base);
+      else
+        syslog(LOG_WARNING, "cannot remove cgroup %s: %s", base,
+               strerror(error));
+    }
   }
   if (lock_fd >= 0)
     close(lock_fd);

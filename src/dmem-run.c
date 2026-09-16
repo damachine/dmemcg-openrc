@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <sys/un.h>
 #include <unistd.h>
 
@@ -71,6 +72,7 @@ static ssize_t read_reply(int fd, char *reply, size_t size) {
 
 int main(int argc, char **argv) {
   char reply[16] = {0};
+  const struct timeval reply_timeout = {.tv_sec = 5};
   ssize_t length;
   int fd;
 
@@ -84,13 +86,25 @@ int main(int argc, char **argv) {
             strerror(errno));
     return EXIT_FAILURE;
   }
+  if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &reply_timeout,
+                 sizeof(reply_timeout)) < 0) {
+    fprintf(stderr, "dmem-run: cannot set service reply timeout: %s\n",
+            strerror(errno));
+    close(fd);
+    return EXIT_FAILURE;
+  }
   if (send_request(fd) < 0) {
     fprintf(stderr, "dmem-run: registration failed: %s\n", strerror(errno));
     close(fd);
     return EXIT_FAILURE;
   }
   length = read_reply(fd, reply, sizeof(reply));
+  int reply_errno = errno;
   close(fd);
+  if (length < 0 && (reply_errno == EAGAIN || reply_errno == EWOULDBLOCK)) {
+    fprintf(stderr, "dmem-run: timed out waiting for service reply\n");
+    return EXIT_FAILURE;
+  }
   if (length < 0 || strncmp(reply, "OK\n", 3) != 0) {
     fprintf(stderr, "dmem-run: service rejected registration\n");
     return EXIT_FAILURE;

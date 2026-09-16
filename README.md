@@ -66,6 +66,9 @@ watch -n1 'cat /sys/fs/cgroup/openrc.dmem-run/dmem.{low,current,peak}'
 # dmem.peak requires Linux 7.3+
 ```
 
+Stopping the service clears `dmem.low`. If programs still use the cgroup, its
+directory remains and is reused when the service starts again.
+
 ## Inspiration
 
 This is an independent OpenRC implementation inspired by the [SteamOS dmemcg booster](https://gitlab.steamos.cloud/holo/dmemcg-booster) and the foreground-booster work in [Jovian's kcgroups fork](https://github.com/Jovian-Experiments/kcgroups).
