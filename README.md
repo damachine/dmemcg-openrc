@@ -7,7 +7,6 @@ An OpenRC service and `dmem-run` launcher that place selected programs in a DMEM
 - Unified cgroup v2 with DMEM enabled (Linux 6.15+; `dmem.peak` requires 7.3+)
 - A GPU driver that registers at least one DMEM region (NVIDIA 615.71.09+ or AMDGPU; Linux 7.3+ recommended for AMDGPU)
 - OpenRC's `cgroups` service
-- The user that runs `dmem-run` must be in the `video` group
 
 Tested with Linux 7.3-rc3 and NVIDIA 615.71.09.
 
@@ -65,9 +64,6 @@ xargs -r ps -fp < /sys/fs/cgroup/openrc.dmem-run/cgroup.procs
 watch -n1 'cat /sys/fs/cgroup/openrc.dmem-run/dmem.{low,current,peak}'
 # dmem.peak requires Linux 7.3+
 ```
-
-Stopping the service clears `dmem.low`. If programs still use the cgroup, its
-directory remains and is reused when the service starts again.
 
 ## Inspiration
 
