@@ -2,10 +2,12 @@
 
 An OpenRC service and `dmem-run` launcher that place selected programs in a DMEM cgroup to help protect their VRAM under memory pressure.
 
+See [A few notes](https://github.com/damachine/dmemcg-openrc/issues/1) for details.
+
 ## Requirements
 
 - Unified cgroup v2 with DMEM enabled (Linux 6.15+; `dmem.peak` requires 7.3+)
-- A GPU driver that registers at least one DMEM region (NVIDIA 615.71.09+ or AMDGPU; Linux 7.3+ recommended for AMDGPU)
+- A GPU driver that registers at least one DMEM region (NVIDIA 615.71.09+ or AMDGPU; Linux 7.3+ recommended)
 - OpenRC's `cgroups` service
 
 Tested with Linux 7.3-rc3 and NVIDIA 615.71.09.
