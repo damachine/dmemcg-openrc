@@ -22,7 +22,11 @@ src_compile() {
 
 src_install() {
 	dosbin dmemcg-openrcd
-	dobin dmem-run
+	dobin dmemcg-run
+	exeinto /usr/libexec/dmemcg-openrc
+	doexe dmemcg-start
+	fowners root:video /usr/libexec/dmemcg-openrc/dmemcg-start
+	fperms 4750 /usr/libexec/dmemcg-openrc/dmemcg-start
 	newinitd openrc/dmemcg-openrc dmemcg-openrc
 	newconfd openrc/dmemcg-openrc.conf dmemcg-openrc
 	dodoc README.md

@@ -52,8 +52,10 @@ static int write_path(const char *path, const char *value) {
   if (fd < 0)
     return -1;
   result = write_all(fd, value, strlen(value));
+  int saved_errno = errno;
   if (close(fd) < 0 && result == 0)
-    result = -1;
+    return -1;
+  errno = saved_errno;
   return result;
 }
 
@@ -106,30 +108,12 @@ static int load_regions(struct region_list *regions) {
   return 0;
 }
 
-static int write_regions(const char *path, const struct region_list *regions,
-                         bool enabled) {
+static int write_regions(const char *path, const struct region_list *regions) {
   int fd = open(path, O_WRONLY | O_CLOEXEC);
   if (fd < 0)
     return -1;
   for (size_t i = 0; i < regions->count; i++) {
     const char *line = regions->lines[i];
-    char disabled[DMEMCG_MAX_LINE];
-    if (!enabled) {
-      char region[DMEMCG_MAX_LINE];
-      int length;
-      if (sscanf(line, "%4095s", region) != 1) {
-        close(fd);
-        errno = EINVAL;
-        return -1;
-      }
-      length = snprintf(disabled, sizeof(disabled), "%s 0\n", region);
-      if (length < 0 || (size_t)length >= sizeof(disabled)) {
-        close(fd);
-        errno = EOVERFLOW;
-        return -1;
-      }
-      line = disabled;
-    }
     if (write_all(fd, line, strlen(line)) < 0) {
       int saved_errno = errno;
       close(fd);
@@ -140,6 +124,53 @@ static int write_regions(const char *path, const struct region_list *regions,
   return close(fd);
 }
 
+static int reset_regions(const char *path, const struct region_list *regions) {
+  int result = 0;
+  for (size_t i = 0; i < regions->count; i++) {
+    char region[DMEMCG_MAX_LINE];
+    char value[DMEMCG_MAX_LINE];
+    int length;
+    if (sscanf(regions->lines[i], "%4095s", region) != 1) {
+      syslog(LOG_WARNING, "cannot reset %s: invalid region at index %zu", path, i);
+      result = -1;
+      continue;
+    }
+    length = snprintf(value, sizeof(value), "%s 0\n", region);
+    if (length < 0 || (size_t)length >= sizeof(value)) {
+      syslog(LOG_WARNING, "cannot reset %s region %s: value too long", path, region);
+      result = -1;
+      continue;
+    }
+    if (write_path(path, value) < 0) {
+      syslog(LOG_WARNING, "cannot reset %s region %s: %s", path, region,
+             strerror(errno));
+      result = -1;
+    }
+  }
+  return result;
+}
+
+static int cleanup_cgroup(const char *base, const struct region_list *regions) {
+  char low[PATH_MAX];
+  int result = 0;
+  if (join_path(low, sizeof(low), base, "dmem.low") < 0) {
+    syslog(LOG_WARNING, "cannot find dmem.low in %s: %s", base, strerror(errno));
+    result = -1;
+  } else if (reset_regions(low, regions) < 0) {
+    result = -1;
+  }
+  if (rmdir(base) < 0 && errno != ENOENT) {
+    int error = errno;
+    if (error == EBUSY || error == ENOTEMPTY)
+      syslog(LOG_NOTICE, "cgroup %s remains because it is not empty", base);
+    else {
+      syslog(LOG_WARNING, "cannot remove cgroup %s: %s", base, strerror(error));
+      result = -1;
+    }
+  }
+  return result;
+}
+
 static int prepare_base(const char *base, const struct region_list *regions) {
   char path[PATH_MAX];
   if (mkdir(base, 0755) < 0 && errno != EEXIST)
@@ -148,53 +179,196 @@ static int prepare_base(const char *base, const struct region_list *regions) {
       write_path(path, "-dmem\n") < 0)
     return -1;
   if (join_path(path, sizeof(path), base, "dmem.low") < 0 ||
-      write_regions(path, regions, true) < 0)
+      write_regions(path, regions) < 0)
     return -1;
   return 0;
 }
 
-static int register_peer(const char *base, const struct ucred *credentials) {
-  char file[PATH_MAX];
-  char pid[32];
+static int peer_alive(int pidfd) {
+  struct pollfd descriptor = {.fd = pidfd, .events = POLLIN};
+  int result;
+  do {
+    result = poll(&descriptor, 1, 0);
+  } while (result < 0 && errno == EINTR);
+  if (result < 0)
+    return -1;
+  if (result != 0) {
+    errno = (descriptor.revents & POLLNVAL) != 0 ? EBADF : ESRCH;
+    return -1;
+  }
+  return 0;
+}
+
+static int check_peer_identity(const struct ucred *credentials, int pidfd) {
+  char path[64];
+  char line[DMEMCG_MAX_LINE];
+  bool found_pid = false;
+  bool found_uid = false;
   int length;
+  int directory;
+  int fd;
+  int error = 0;
+  FILE *stream;
+
   if (credentials->pid <= 1 || credentials->uid == 0) {
     errno = EPERM;
     return -1;
   }
-  if (join_path(file, sizeof(file), base, "cgroup.procs") < 0)
+  if (peer_alive(pidfd) < 0)
     return -1;
-  length = snprintf(pid, sizeof(pid), "%ld\n", (long)credentials->pid);
-  if (length < 0 || (size_t)length >= sizeof(pid) || write_path(file, pid) < 0)
+  length = snprintf(path, sizeof(path), "/proc/%ld", (long)credentials->pid);
+  if (length < 0 || (size_t)length >= sizeof(path)) {
+    errno = ENAMETOOLONG;
     return -1;
-  return 0;
+  }
+  directory = open(path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+  if (directory < 0)
+    return -1;
+  fd = openat(directory, "status", O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+  error = errno;
+  close(directory);
+  if (fd < 0) {
+    errno = error;
+    return -1;
+  }
+  stream = fdopen(fd, "r");
+  if (stream == NULL) {
+    error = errno;
+    close(fd);
+    errno = error;
+    return -1;
+  }
+  error = 0;
+  while (fgets(line, sizeof(line), stream) != NULL) {
+    char extra;
+    if (strncmp(line, "Pid:", 4) == 0) {
+      long pid;
+      if (sscanf(line + 4, "%ld %c", &pid, &extra) != 1 ||
+          pid != (long)credentials->pid) {
+        error = EPERM;
+        break;
+      }
+      found_pid = true;
+    } else if (strncmp(line, "Uid:", 4) == 0) {
+      unsigned long real, effective, saved, filesystem;
+      if (sscanf(line + 4, "%lu %lu %lu %lu %c", &real, &effective, &saved,
+                 &filesystem, &extra) != 4 ||
+          real != (unsigned long)credentials->uid ||
+          effective != (unsigned long)credentials->uid ||
+          saved != (unsigned long)credentials->uid ||
+          filesystem != (unsigned long)credentials->uid) {
+        error = EPERM;
+        break;
+      }
+      found_uid = true;
+    }
+  }
+  if (ferror(stream) != 0 && error == 0)
+    error = errno != 0 ? errno : EIO;
+  if (fclose(stream) < 0 && error == 0)
+    error = errno;
+  if (error == 0 && (!found_pid || !found_uid))
+    error = EPERM;
+  if (error != 0) {
+    errno = error;
+    return -1;
+  }
+  /* A pidfd from the socket identifies the connector, even if its PID is reused. */
+  return peer_alive(pidfd);
+}
+
+static int register_peer(const char *base, const struct ucred *credentials,
+                         int pidfd) {
+  if (check_peer_identity(credentials, pidfd) < 0)
+    return -1;
+  int fd = open(base, O_PATH | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+  if (fd < 0)
+    return -1;
+  if (peer_alive(pidfd) < 0) {
+    int error = errno;
+    close(fd);
+    errno = error;
+    return -1;
+  }
+  return fd;
+}
+
+static int send_group(int client, int group) {
+  char reply[] = "OK\n";
+  struct iovec vector = {.iov_base = reply, .iov_len = sizeof(reply) - 1};
+  union {
+    struct cmsghdr alignment;
+    char bytes[CMSG_SPACE(sizeof(group))];
+  } control = {0};
+  struct msghdr message = {.msg_iov = &vector, .msg_iovlen = 1,
+                          .msg_control = control.bytes,
+                          .msg_controllen = sizeof(control.bytes)};
+  struct cmsghdr *header = CMSG_FIRSTHDR(&message);
+  header->cmsg_level = SOL_SOCKET;
+  header->cmsg_type = SCM_RIGHTS;
+  header->cmsg_len = CMSG_LEN(sizeof(group));
+  memcpy(CMSG_DATA(header), &group, sizeof(group));
+  ssize_t written;
+  do {
+    written = sendmsg(client, &message, MSG_NOSIGNAL);
+  } while (written < 0 && errno == EINTR);
+  if (written <= 0)
+    return -1;
+  return write_all(client, reply + written, sizeof(reply) - 1 - (size_t)written);
 }
 
 static void handle_client(int client, const char *base) {
-  static const char expected[] = "REGISTER\n";
-  struct ucred credentials;
+  static const char expected[] = "SPAWN\n";
+  struct ucred credentials = {0};
   struct timeval timeout = {.tv_usec = 100000};
   socklen_t length = sizeof(credentials);
   char request[sizeof(expected) - 1];
   ssize_t received;
+  int pidfd = -1;
   if (getsockopt(client, SOL_SOCKET, SO_PEERCRED, &credentials, &length) < 0)
-    return;
-  if (setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) <
-      0)
-    return;
+    goto rejected;
+  if (length != sizeof(credentials)) {
+    errno = EPROTO;
+    goto rejected;
+  }
+#ifdef SO_PEERPIDFD
+  length = sizeof(pidfd);
+  if (getsockopt(client, SOL_SOCKET, SO_PEERPIDFD, &pidfd, &length) < 0)
+    goto rejected;
+  if (length != sizeof(pidfd) || pidfd < 0) {
+    errno = EPROTO;
+    goto rejected;
+  }
+#else
+  errno = EOPNOTSUPP;
+  goto rejected;
+#endif
+  if (peer_alive(pidfd) < 0 ||
+      setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0)
+    goto rejected;
   received = recv(client, request, sizeof(request), MSG_WAITALL);
+  if (received < 0)
+    goto rejected;
   if (received != (ssize_t)sizeof(request) ||
       memcmp(request, expected, sizeof(request)) != 0) {
-    (void)write_all(client, "ERROR\n", 6);
-    return;
+    errno = EPROTO;
+    goto rejected;
   }
-  if (register_peer(base, &credentials) < 0) {
-    syslog(LOG_WARNING, "cannot register uid %lu pid %ld: %s",
-           (unsigned long)credentials.uid, (long)credentials.pid,
-           strerror(errno));
-    (void)write_all(client, "ERROR\n", 6);
-    return;
-  }
-  (void)write_all(client, "OK\n", 3);
+  int group = register_peer(base, &credentials, pidfd);
+  if (group < 0)
+    goto rejected;
+  if (send_group(client, group) < 0)
+    syslog(LOG_WARNING, "cannot send cgroup handle to uid %lu pid %ld: %s",
+           (unsigned long)credentials.uid, (long)credentials.pid, strerror(errno));
+  close(group);
+  close(pidfd);
+  return;
+rejected:
+  syslog(LOG_WARNING, "cannot register uid %lu pid %ld: %s",
+         (unsigned long)credentials.uid, (long)credentials.pid, strerror(errno));
+  (void)write_all(client, "ERROR\n", 6);
+  if (pidfd >= 0)
+    close(pidfd);
 }
 
 static int acquire_instance_lock(void) {
@@ -327,21 +501,13 @@ int main(int argc, char **argv) {
 cleanup:
   if (listener >= 0)
     close(listener);
-  if (socket_touched)
-    (void)unlink(DMEMCG_SOCKET);
-  if (base_touched) {
-    char low[PATH_MAX];
-    if (join_path(low, sizeof(low), base, "dmem.low") == 0)
-      (void)write_regions(low, &regions, false);
-    if (rmdir(base) < 0) {
-      int error = errno;
-      if (error == EBUSY || error == ENOTEMPTY)
-        syslog(LOG_NOTICE, "cgroup %s remains because it is not empty", base);
-      else
-        syslog(LOG_WARNING, "cannot remove cgroup %s: %s", base,
-               strerror(error));
-    }
+  if (socket_touched && unlink(DMEMCG_SOCKET) < 0 && errno != ENOENT) {
+    syslog(LOG_WARNING, "cannot remove socket %s: %s", DMEMCG_SOCKET,
+           strerror(errno));
+    exit_status = EXIT_FAILURE;
   }
+  if (base_touched && cleanup_cgroup(base, &regions) < 0)
+    exit_status = EXIT_FAILURE;
   if (lock_fd >= 0)
     close(lock_fd);
   closelog();

@@ -1,6 +1,6 @@
 # dmemcg-openrc
 
-An OpenRC service and `dmem-run` launcher that place selected programs in a DMEM cgroup to help protect their VRAM under memory pressure.
+An OpenRC service and `dmemcg-run` launcher that place selected programs in a DMEM cgroup to help protect their VRAM under memory pressure.
 
 See [A few notes](https://github.com/damachine/dmemcg-openrc/issues/1) for details.
 
@@ -44,26 +44,26 @@ sudo rc-update add dmemcg-openrc default
 sudo rc-service dmemcg-openrc start
 ```
 
-Run any command through `dmem-run`. For example, place it directly before `%command%` in a Steam game's launch options:
+Run any command through `dmemcg-run`. For example, place it directly before `%command%` in a Steam game's launch options:
 
 ```text
-gamemoderun dmem-run %command%
+gamemoderun dmemcg-run %command%
 ```
 
 Or run a command directly:
 
 ```sh
-dmem-run blender
+dmemcg-run blender
 ```
 
 Show the processes and monitor the DMEM values:
 
 ```sh
-xargs -r ps -fp < /sys/fs/cgroup/openrc.dmem-run/cgroup.procs
+xargs -r ps -fp < /sys/fs/cgroup/openrc.dmemcg-run/cgroup.procs
 ```
 
 ```sh
-watch -n1 'cat /sys/fs/cgroup/openrc.dmem-run/dmem.{low,current,peak}'
+watch -n1 'cat /sys/fs/cgroup/openrc.dmemcg-run/dmem.{low,current,peak}'
 # dmem.peak requires Linux 7.3+
 ```
 

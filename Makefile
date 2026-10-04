@@ -6,23 +6,27 @@ WARNINGS = -Wall -Wextra -Werror -Wformat=2 -Wshadow -Wconversion \
 	-Wstrict-prototypes -Wmissing-prototypes
 
 .PHONY: all clean install uninstall
-all: dmemcg-openrcd dmem-run
+all: dmemcg-openrcd dmemcg-run dmemcg-start
 dmemcg-openrcd: src/dmemcg-openrcd.c src/common.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARNINGS) -std=c17 -o $@ src/dmemcg-openrcd.c $(LDFLAGS)
-dmem-run: src/dmem-run.c src/common.h
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARNINGS) -std=c17 -o $@ src/dmem-run.c $(LDFLAGS)
+dmemcg-run: src/dmemcg-run.c src/common.h src/control.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARNINGS) -std=c17 -o $@ src/dmemcg-run.c $(LDFLAGS)
+dmemcg-start: src/dmemcg.c src/common.h src/control.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARNINGS) -std=c17 -o $@ src/dmemcg.c $(LDFLAGS)
 install: all
 	install -Dm0755 dmemcg-openrcd "$(DESTDIR)/usr/sbin/dmemcg-openrcd"
-	install -Dm0755 dmem-run "$(DESTDIR)/usr/bin/dmem-run"
+	install -Dm4750 -o root -g video dmemcg-start "$(DESTDIR)/usr/libexec/dmemcg-openrc/dmemcg-start"
+	install -Dm0755 dmemcg-run "$(DESTDIR)/usr/bin/dmemcg-run"
 	install -Dm0755 openrc/dmemcg-openrc "$(DESTDIR)/etc/init.d/dmemcg-openrc"
 	install -Dm0644 openrc/dmemcg-openrc.conf "$(DESTDIR)/etc/conf.d/dmemcg-openrc"
 	install -Dm0644 LICENSE "$(DESTDIR)/usr/share/licenses/dmemcg-openrc/LICENSE"
 uninstall:
 	rm -f "$(DESTDIR)/usr/sbin/dmemcg-openrcd" \
-		"$(DESTDIR)/usr/bin/dmem-run" \
+		"$(DESTDIR)/usr/bin/dmemcg-run" \
+		"$(DESTDIR)/usr/libexec/dmemcg-openrc/dmemcg-start" \
 		"$(DESTDIR)/etc/init.d/dmemcg-openrc" \
 		"$(DESTDIR)/etc/conf.d/dmemcg-openrc" \
 		"$(DESTDIR)/usr/share/licenses/dmemcg-openrc/LICENSE"
 	rmdir "$(DESTDIR)/usr/share/licenses/dmemcg-openrc" 2>/dev/null || :
 clean:
-	rm -f dmemcg-openrcd dmem-run
+	rm -f dmemcg-openrcd dmemcg-run dmemcg-start
